@@ -1,5 +1,4 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { GoogleSpreadsheet } from 'google-spreadsheet';
 import Anthropic from '@anthropic-ai/sdk';
 
 const token = '8639089557:AAEvjmjO1dqJrXUpgumpuLIFS9aprOJdk5E';
@@ -7,61 +6,15 @@ const bot = new TelegramBot(token, { polling: true });
 const client = new Anthropic();
 
 const userContexts = {};
-const SHEET_ID = '1GIJl4B_ymZik3WRzu_fWqg0SyEOVk9r9Fhss5Y8BMHw';
-
-async function getSheetData() {
-  try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || '{}');
-    const doc = new GoogleSpreadsheet(SHEET_ID);
-    await doc.useServiceAccountAuth(credentials);
-    await doc.loadInfo();
-    
-    const sheet = doc.sheetsByTitle['BD SERVICIOS'];
-    if (!sheet) {
-      console.log('Available sheets:', doc.sheetsByTitle.keys);
-      return [];
-    }
-    
-    const rows = await sheet.getRows();
-    console.log('Total rows:', rows.length);
-    if (rows.length > 0) {
-      console.log('First row raw:', rows[0]._rawData);
-      console.log('First row:', rows[0]);
-    }
-    
-    return rows;
-  } catch (error) {
-    console.error('Error fetching sheet:', error);
-    return [];
-  }
-}
-
-async function generateAnalytics(period = 'weekly') {
-  const data = await getSheetData();
-  if (data.length === 0) {
-    return 'No data available yet.';
-  }
-  const totalSales = data.reduce((sum, row) => sum + row.valor, 0);
-  const totalMargin = data.reduce((sum, row) => sum + row.margen, 0);
-  const avgMargin = data.length > 0 ? (totalMargin / data.length).toFixed(2) : 0;
-  const b2b = data.filter(row => row.tipo_cliente === 'EMPRESA');
-  const b2c = data.filter(row => row.tipo_cliente === 'HOGAR');
-  const b2bSales = b2b.reduce((sum, row) => sum + row.valor, 0);
-  const b2cSales = b2c.reduce((sum, row) => sum + row.valor, 0);
-  const deepCleaning = data.filter(row => row.servicio && row.servicio.includes('PROFUNDA'));
-  const otherServices = data.filter(row => !row.servicio || !row.servicio.includes('PROFUNDA'));
-  const deepCleaningSales = deepCleaning.reduce((sum, row) => sum + row.valor, 0);
-  const otherServicesSales = otherServices.reduce((sum, row) => sum + row.valor, 0);
-  
-  return `📊 te.soluciona ${period.toUpperCase()} SUMMARY\n\n💰 Sales Metrics:\n• Total Sales: $${totalSales.toFixed(2)}\n• Total Margin: $${totalMargin.toFixed(2)}\n• Average Margin per Service: $${avgMargin}\n• Services Completed: ${data.length}\n\n👥 Client Type Breakdown:\n• B2B (EMPRESA): $${b2bSales.toFixed(2)} (${((b2bSales/totalSales)*100).toFixed(1)}%)\n• B2C (HOGAR): $${b2cSales.toFixed(2)} (${((b2cSales/totalSales)*100).toFixed(1)}%)\n\n🧹 Service Type Breakdown:\n• Deep Cleaning (PROFUNDA): $${deepCleaningSales.toFixed(2)} (${((deepCleaningSales/totalSales)*100).toFixed(1)}%)\n• Other Services: $${otherServicesSales.toFixed(2)} (${((otherServicesSales/totalSales)*100).toFixed(1)}%)`;
-}
 
 async function getClaudeResponse(userMessage, userId) {
   if (!userContexts[userId]) {
     userContexts[userId] = [];
   }
-  const sheetData = await getSheetData();
-  const systemPrompt = `You are an AI business assistant for te.soluciona, a cleaning company in Lima, Peru. Analyze sales data and provide insights on B2B vs B2C revenue and service performance. Respond in Spanish.`;
+
+  const systemPrompt = `You are an AI business assistant for te.soluciona, a cleaning company in Lima, Peru. 
+Analyze sales data and provide insights on revenue, margins, and performance. 
+Respond in Spanish. Be helpful and concise.`;
   
   userContexts[userId].push({ role: 'user', content: userMessage });
   
@@ -72,41 +25,32 @@ async function getClaudeResponse(userMessage, userId) {
       system: systemPrompt,
       messages: userContexts[userId]
     });
+    
     const assistantMessage = response.content[0].text;
     userContexts[userId].push({ role: 'assistant', content: assistantMessage });
+    
     if (userContexts[userId].length > 20) {
       userContexts[userId] = userContexts[userId].slice(-20);
     }
+    
     return assistantMessage;
   } catch (error) {
     console.error('Claude API error:', error);
-    return 'Error processing your request.';
+    return 'Error procesando tu solicitud. Intenta de nuevo.';
   }
 }
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, '¡Hola! 👋 Soy tu asistente de te.soluciona.\n\nPuedo ayudarte con:\n• /daily - Resumen diario\n• /weekly - Resumen semanal\n• Preguntas sobre ventas, márgenes y clientes\n\n¿Qué necesitas hoy?');
-});
-
-bot.onText(/\/daily/, async (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendChatAction(chatId, 'typing');
-  const analytics = await generateAnalytics('daily');
-  bot.sendMessage(chatId, analytics);
-});
-
-bot.onText(/\/weekly/, async (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendChatAction(chatId, 'typing');
-  const analytics = await generateAnalytics('weekly');
-  bot.sendMessage(chatId, analytics);
+  bot.sendMessage(chatId, '¡Hola! 👋 Soy tu asistente de te.soluciona.\n\nPuedo ayudarte con:\n• Preguntas sobre ventas\n• Análisis de márgenes\n• Comparación B2B vs B2C\n• Información sobre servicios\n\n¿Qué necesitas hoy?');
 });
 
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const messageText = msg.text;
+
   if (messageText.startsWith('/')) return;
+
   bot.sendChatAction(chatId, 'typing');
   const response = await getClaudeResponse(messageText, chatId);
   bot.sendMessage(chatId, response);
