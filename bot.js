@@ -20,8 +20,8 @@ async function getSheetData() {
     return rows.map(row => ({
       fecha: row.get('FECHA') || row.get('Fecha'),
       cliente: row.get('CLIENTE') || row.get('Cliente'),
-      tipo_cliente: row.get('TIPO') || row.get('Tipo'),
-      servicio: row.get('SERVICIO') || row.get('Servicio'),
+      tipo_cliente: row.get('TIPO CLIENTE') || row.get('Tipo Cliente'),
+      servicio: row.get('TIPO DE SERVICIO') || row.get('Tipo de Servicio'),
       valor: parseFloat(row.get('VALOR') || row.get('Valor') || 0),
       margen: parseFloat(row.get('MARGEN') || row.get('Margen') || 0),
     }));
