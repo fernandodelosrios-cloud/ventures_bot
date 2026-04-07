@@ -19,11 +19,11 @@ async function getSheetData() {
     const rows = await sheet.getRows();
     return rows.map(row => ({
       fecha: row.get('FECHA') || row.get('Fecha'),
-      cliente: row.get('CLIENTE') || row.get('Cliente'),
-      tipo_cliente: row.get('TIPO CLIENTE') || row.get('Tipo Cliente'),
-      servicio: row.get('TIPO DE SERVICIO') || row.get('Tipo de Servicio'),
-      valor: parseFloat(row.get('VALOR') || row.get('Valor') || 0),
-      margen: parseFloat(row.get('MARGEN') || row.get('Margen') || 0),
+  cliente: row.get('CLIENTE') || row.get('Cliente'),
+  tipo_cliente: row.get('TIPO CLIENTE') || row.get('Tipo Cliente'),
+  servicio: row.get('TIPO DE SERVICIO') || row.get('Tipo de Servicio'),
+  valor: parseFloat(row.get('VALOR') || 0),
+  margen: parseFloat(row.get('MARGEN') || 0),
     }));
   } catch (error) {
     console.error('Error fetching sheet data:', error);
