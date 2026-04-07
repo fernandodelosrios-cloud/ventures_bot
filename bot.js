@@ -15,18 +15,23 @@ async function getSheetData() {
     const doc = new GoogleSpreadsheet(SHEET_ID);
     await doc.useServiceAccountAuth(credentials);
     await doc.loadInfo();
+    
     const sheet = doc.sheetsByTitle['BD SERVICIOS'];
+    if (!sheet) {
+      console.log('Available sheets:', doc.sheetsByTitle.keys);
+      return [];
+    }
+    
     const rows = await sheet.getRows();
-    return rows.map(row => ({
-      fecha: row.get('FECHA') || row.get('Fecha'),
-  cliente: row.get('CLIENTE') || row.get('Cliente'),
-  tipo_cliente: row.get('TIPO CLIENTE') || row.get('Tipo Cliente'),
-  servicio: row.get('TIPO DE SERVICIO') || row.get('Tipo de Servicio'),
-  valor: parseFloat(row.get('VALOR') || 0),
-  margen: parseFloat(row.get('MARGEN') || 0),
-    }));
+    console.log('Total rows:', rows.length);
+    if (rows.length > 0) {
+      console.log('First row raw:', rows[0]._rawData);
+      console.log('First row:', rows[0]);
+    }
+    
+    return rows;
   } catch (error) {
-    console.error('Error fetching sheet data:', error);
+    console.error('Error fetching sheet:', error);
     return [];
   }
 }
