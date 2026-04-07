@@ -15,7 +15,7 @@ async function getSheetData() {
     const doc = new GoogleSpreadsheet(SHEET_ID);
     await doc.useServiceAccountAuth(credentials);
     await doc.loadInfo();
-    const sheet = doc.sheetsByIndex[0];
+    const sheet = doc.sheetsByTitle['BD SERVICIOS'];
     const rows = await sheet.getRows();
     return rows.map(row => ({
       fecha: row.get('FECHA') || row.get('Fecha'),
