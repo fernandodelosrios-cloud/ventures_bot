@@ -1,0 +1,9 @@
+{
+  "buildCommand": "npm install",
+  "outputDirectory": "./",
+  "installCommand": "npm install",
+  "env": [
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_CREDENTIALS"
+  ]
+}
