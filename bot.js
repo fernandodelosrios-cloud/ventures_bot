@@ -72,11 +72,61 @@ async function getClaudeResponse(userMessage, userId) {
     userContexts[userId] = [];
   }
 
-  const analytics = await generateAnalytics();
+  let data = await getSheetData();
   
-  const systemPrompt = `Eres un asistente de negocios para te.soluciona (empresa de limpieza en Lima).
-Tienes estos datos: ${analytics}
-Responde en español, sé conciso y útil.`;
+  // Try to extract year and month from message
+  const yearMatch = userMessage.match(/202[0-9]|202\d/);
+  const monthMatch = userMessage.match(/enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|\d{1,2}/i);
+  
+  const monthNames = {
+    'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+    'julio': 7, 'agosto': 8, 'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+  };
+  
+  let filteredData = data;
+  let periodInfo = '';
+  
+  if (yearMatch) {
+    const year = parseInt(yearMatch[0]);
+    filteredData = data.filter(row => {
+      if (!row.fecha) return false;
+      const parts = row.fecha.split('/');
+      if (parts.length === 3) {
+        const rowYear = parseInt(parts[2]);
+        return rowYear === year;
+      }
+      return false;
+    });
+    periodInfo = `Año ${year}`;
+    
+    if (monthMatch) {
+      const monthStr = monthMatch[0].toLowerCase();
+      const monthNum = monthNames[monthStr] || parseInt(monthStr);
+      if (monthNum) {
+        filteredData = filteredData.filter(row => {
+          if (!row.fecha) return false;
+          const parts = row.fecha.split('/');
+          if (parts.length === 3) {
+            const rowMonth = parseInt(parts[1]);
+            return rowMonth === monthNum;
+          }
+          return false;
+        });
+        periodInfo = `${monthMatch[0]} ${year}`;
+      }
+    }
+  }
+  
+  const totalSales = filteredData.reduce((sum, row) => sum + (row.valor || 0), 0);
+  const totalMargin = filteredData.reduce((sum, row) => sum + (row.margen || 0), 0);
+  const b2b = filteredData.filter(row => row.tipo_cliente === 'Empresa').length;
+  const b2c = filteredData.filter(row => row.tipo_cliente === 'Hogar').length;
+  
+  const analytics = `📊 ${periodInfo || 'GENERAL'}\nTotal: S/${totalSales.toFixed(2)}\nServicios: ${filteredData.length}\nB2B: ${b2b} | B2C: ${b2c}\nMargen: S/${totalMargin.toFixed(2)}`;
+  
+  const systemPrompt = `Eres asistente de te.soluciona (limpieza Lima).
+Datos solicitados: ${analytics}
+Responde en español, sé conciso.`;
   
   userContexts[userId].push({ role: 'user', content: userMessage });
   
@@ -98,31 +148,6 @@ Responde en español, sé conciso y útil.`;
     return assistantMessage;
   } catch (error) {
     console.error('Claude error:', error);
-    return '❌ Error con Claude API';
+    return '❌ Error';
   }
 }
-
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, '¡Hola! 👋 Soy tu asistente de te.soluciona.\n\n/daily - Resumen\n/help - Ayuda\n\n¿Qué necesitas?');
-});
-
-bot.onText(/\/daily/, async (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendChatAction(chatId, 'typing');
-  const analytics = await generateAnalytics();
-  bot.sendMessage(chatId, analytics);
-});
-
-bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
-  const messageText = msg.text;
-
-  if (messageText.startsWith('/')) return;
-
-  bot.sendChatAction(chatId, 'typing');
-  const response = await getClaudeResponse(messageText, chatId);
-  bot.sendMessage(chatId, response);
-});
-
-console.log('Bot iniciado...');
