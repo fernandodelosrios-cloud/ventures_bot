@@ -1,5 +1,4 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { GoogleSpreadsheet } from 'google-spreadsheet';
 import Anthropic from '@anthropic-ai/sdk';
 
 const token = '8639089557:AAEvjmjO1dqJrXUpgumpuLIFS9aprOJdk5E';
@@ -8,31 +7,39 @@ const client = new Anthropic();
 
 const userContexts = {};
 const SHEET_ID = '1GIJl4B_ymZik3WRzu_fWqg0SyEOVk9r9Fhss5Y8BMHw';
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
 async function getSheetData() {
   try {
-    const doc = new GoogleSpreadsheet(SHEET_ID);
+    // Get all values from the sheet
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/'BD SERVICIOS'?key=${GOOGLE_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
     
-    // Use API key for authentication
-    doc.useApiKey(process.env.GOOGLE_API_KEY);
-    await doc.loadInfo();
-    
-    const sheet = doc.sheetsByTitle['BD SERVICIOS'];
-    if (!sheet) {
-      console.log('Sheet BD SERVICIOS not found');
+    if (!data.values || data.values.length < 2) {
+      console.log('No data in sheet');
       return [];
     }
     
-    const rows = await sheet.getRows();
-    console.log('Total rows fetched:', rows.length);
+    const headers = data.values[0];
+    const rows = data.values.slice(1);
+    
+    // Map headers to indices
+    const headerIndices = {};
+    headers.forEach((header, idx) => {
+      headerIndices[header.trim()] = idx;
+    });
+    
+    console.log('Headers:', headers);
+    console.log('Total rows:', rows.length);
     
     return rows.map(row => ({
-      fecha: row.get('FECHA'),
-      cliente: row.get('CLIENTE'),
-      tipo_cliente: row.get('TIPO CLIENTE'),
-      servicio: row.get('TIPO DE SERVICIO'),
-      valor: parseFloat(row.get('VALOR') || 0),
-      margen: parseFloat(row.get('MARGEN') || 0),
+      fecha: row[headerIndices['FECHA']] || '',
+      cliente: row[headerIndices['CLIENTE']] || '',
+      tipo_cliente: row[headerIndices['TIPO CLIENTE']] || '',
+      servicio: row[headerIndices['TIPO DE SERVICIO']] || '',
+      valor: parseFloat(row[headerIndices['VALOR']] || 0),
+      margen: parseFloat(row[headerIndices['MARGEN']] || 0),
     })).filter(row => row.valor > 0);
   } catch (error) {
     console.error('Error fetching sheet:', error);
@@ -137,4 +144,4 @@ bot.on('error', (error) => {
   console.error('Telegram bot error:', error);
 });
 
-console.log('te.soluciona Telegram bot is running with Google Sheets...');
+console.log('te.soluciona Telegram bot is running with Google Sheets API...');
