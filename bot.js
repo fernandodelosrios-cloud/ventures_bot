@@ -58,45 +58,14 @@ async function generateAnalytics() {
   const totalMargin = data.reduce((sum, row) => sum + (row.margen || 0), 0);
   const avgMargin = data.length > 0 ? (totalMargin / data.length).toFixed(2) : 0;
   
-  // Group by year and month
-  const salesByYearMonth = {};
-  data.forEach(row => {
-    if (row.fecha) {
-      const dateParts = row.fecha.split('/');
-      if (dateParts.length >= 3) {
-        const day = parseInt(dateParts[0]);
-        const month = parseInt(dateParts[1]);
-        const year = parseInt(dateParts[2]);
-        
-        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-          const key = `${year}-${String(month).padStart(2, '0')}`;
-          if (!salesByYearMonth[key]) {
-            salesByYearMonth[key] = { sales: 0, margin: 0, count: 0 };
-          }
-          salesByYearMonth[key].sales += row.valor || 0;
-          salesByYearMonth[key].margin += row.margen || 0;
-          salesByYearMonth[key].count += 1;
-        }
-      }
-    }
-  });
-  
-  const yearMonthSummary = Object.entries(salesByYearMonth)
-    .sort()
-    .reverse()
-    .slice(0, 12)
-    .map(([key, data]) => `${key}: $${data.sales.toFixed(2)} (${data.count} servicios)`)
-    .join('\n');
-  
   const b2b = data.filter(row => row.tipo_cliente === 'Empresa');
   const b2c = data.filter(row => row.tipo_cliente === 'Hogar');
   const b2bSales = b2b.reduce((sum, row) => sum + (row.valor || 0), 0);
   const b2cSales = b2c.reduce((sum, row) => sum + (row.valor || 0), 0);
   
   const deepCleaning = data.filter(row => row.servicio && row.servicio.includes('PROFUNDA'));
-  const otherServices = data.filter(row => !row.servicio || !row.servicio.includes('PROFUNDA'));
   const deepCleaningSales = deepCleaning.reduce((sum, row) => sum + (row.valor || 0), 0);
-  const otherServicesSales = otherServices.reduce((sum, row) => sum + (row.valor || 0), 0);
+  const otherServicesSales = totalSales - deepCleaningSales;
   
   return `📊 RESUMEN DE VENTAS - te.soluciona
 
@@ -105,9 +74,6 @@ Ventas Totales: S/${totalSales.toFixed(2)}
 Márgen Total: S/${totalMargin.toFixed(2)}
 Márgen Promedio: S/${avgMargin}
 Total de Servicios: ${data.length}
-
-📅 VENTAS POR MES (últimos 12 meses):
-${yearMonthSummary}
 
 👥 B2B vs B2C:
 B2B (Empresa): S/${b2bSales.toFixed(2)} (${b2bSales > 0 ? ((b2bSales/totalSales)*100).toFixed(1) : 0}%)
