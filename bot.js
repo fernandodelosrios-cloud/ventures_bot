@@ -58,6 +58,36 @@ async function generateAnalytics() {
   const totalMargin = data.reduce((sum, row) => sum + (row.margen || 0), 0);
   const avgMargin = data.length > 0 ? (totalMargin / data.length).toFixed(2) : 0;
   
+  // Group by year and month
+  const salesByYearMonth = {};
+  data.forEach(row => {
+    if (row.fecha) {
+      const dateParts = row.fecha.split('/');
+      if (dateParts.length >= 3) {
+        const day = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]);
+        const year = parseInt(dateParts[2]);
+        
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          const key = `${year}-${String(month).padStart(2, '0')}`;
+          if (!salesByYearMonth[key]) {
+            salesByYearMonth[key] = { sales: 0, margin: 0, count: 0 };
+          }
+          salesByYearMonth[key].sales += row.valor || 0;
+          salesByYearMonth[key].margin += row.margen || 0;
+          salesByYearMonth[key].count += 1;
+        }
+      }
+    }
+  });
+  
+  const yearMonthSummary = Object.entries(salesByYearMonth)
+    .sort()
+    .reverse()
+    .slice(0, 12)
+    .map(([key, data]) => `${key}: $${data.sales.toFixed(2)} (${data.count} servicios)`)
+    .join('\n');
+  
   const b2b = data.filter(row => row.tipo_cliente === 'Empresa');
   const b2c = data.filter(row => row.tipo_cliente === 'Hogar');
   const b2bSales = b2b.reduce((sum, row) => sum + (row.valor || 0), 0);
@@ -68,80 +98,22 @@ async function generateAnalytics() {
   const deepCleaningSales = deepCleaning.reduce((sum, row) => sum + (row.valor || 0), 0);
   const otherServicesSales = otherServices.reduce((sum, row) => sum + (row.valor || 0), 0);
   
-  return `📊 RESUMEN DE VENTAS\n\n💰 Ventas Totales: S/${totalSales.toFixed(2)}\nMárgen Total: S/${totalMargin.toFixed(2)}\nMárgen Promedio: S/${avgMargin}\n\n👥 B2B vs B2C:\nB2B (Empresa): S/${b2bSales.toFixed(2)} (${b2bSales > 0 ? ((b2bSales/totalSales)*100).toFixed(1) : 0}%)\nB2C (Hogar): S/${b2cSales.toFixed(2)} (${b2cSales > 0 ? ((b2cSales/totalSales)*100).toFixed(1) : 0}%)\n\n🧹 Limpieza Profunda vs Otros:\nProfunda: S/${deepCleaningSales.toFixed(2)} (${deepCleaningSales > 0 ? ((deepCleaningSales/totalSales)*100).toFixed(1) : 0}%)\nOtros: S/${otherServicesSales.toFixed(2)} (${otherServicesSales > 0 ? ((otherServicesSales/totalSales)*100).toFixed(1) : 0}%)`;
+  return `📊 RESUMEN DE VENTAS - te.soluciona
+
+💰 TOTALES:
+Ventas Totales: S/${totalSales.toFixed(2)}
+Márgen Total: S/${totalMargin.toFixed(2)}
+Márgen Promedio: S/${avgMargin}
+Total de Servicios: ${data.length}
+
+📅 VENTAS POR MES (últimos 12 meses):
+${yearMonthSummary}
+
+👥 B2B vs B2C:
+B2B (Empresa): S/${b2bSales.toFixed(2)} (${b2bSales > 0 ? ((b2bSales/totalSales)*100).toFixed(1) : 0}%)
+B2C (Hogar): S/${b2cSales.toFixed(2)} (${b2cSales > 0 ? ((b2cSales/totalSales)*100).toFixed(1) : 0}%)
+
+🧹 LIMPIEZA PROFUNDA vs OTROS:
+Profunda: S/${deepCleaningSales.toFixed(2)} (${deepCleaningSales > 0 ? ((deepCleaningSales/totalSales)*100).toFixed(1) : 0}%)
+Otros: S/${otherServicesSales.toFixed(2)} (${otherServicesSales > 0 ? ((otherServicesSales/totalSales)*100).toFixed(1) : 0}%)`;
 }
-
-async function getClaudeResponse(userMessage, userId) {
-  if (!userContexts[userId]) {
-    userContexts[userId] = [];
-  }
-
-  const analytics = await generateAnalytics();
-  
-  const systemPrompt = `You are an AI business assistant for te.soluciona, a cleaning company in Lima, Peru. 
-You have access to real sales data from their Google Sheet.
-Analyze sales data and provide insights on revenue, margins, B2B vs B2C, and service performance.
-Respond in Spanish. Be helpful and concise.
-
-Current analytics:
-${analytics}`;
-  
-  userContexts[userId].push({ role: 'user', content: userMessage });
-  
-  try {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
-      system: systemPrompt,
-      messages: userContexts[userId]
-    });
-    
-    const assistantMessage = response.content[0].text;
-    userContexts[userId].push({ role: 'assistant', content: assistantMessage });
-    
-    if (userContexts[userId].length > 20) {
-      userContexts[userId] = userContexts[userId].slice(-20);
-    }
-    
-    return assistantMessage;
-  } catch (error) {
-    console.error('Claude API error:', error);
-    return 'Error procesando tu solicitud. Intenta de nuevo.';
-  }
-}
-
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, '¡Hola! 👋 Soy tu asistente de te.soluciona.\n\nPuedo ayudarte con:\n• /daily - Resumen diario\n• /weekly - Resumen semanal\n• Preguntas sobre ventas, márgenes y clientes\n\n¿Qué necesitas hoy?');
-});
-
-bot.onText(/\/daily/, async (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendChatAction(chatId, 'typing');
-  const analytics = await generateAnalytics();
-  bot.sendMessage(chatId, analytics);
-});
-
-bot.onText(/\/weekly/, async (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendChatAction(chatId, 'typing');
-  const analytics = await generateAnalytics();
-  bot.sendMessage(chatId, analytics);
-});
-
-bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
-  const messageText = msg.text;
-
-  if (messageText.startsWith('/')) return;
-
-  bot.sendChatAction(chatId, 'typing');
-  const response = await getClaudeResponse(messageText, chatId);
-  bot.sendMessage(chatId, response);
-});
-
-bot.on('error', (error) => {
-  console.error('Telegram bot error:', error);
-});
-
-console.log('te.soluciona Telegram bot is running with Google Sheets API...');
